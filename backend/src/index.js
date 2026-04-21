@@ -49,6 +49,18 @@ app.use('/api/auth', authRoutes);
 app.use('/api/fields', fieldsRoutes);
 app.use('/api/users', usersRoutes);
 
+
+// TEMPORARY — seed endpoint, remove after first deploy
+app.get('/api/setup', async (req, res) => {
+  try {
+    const { seed } = require('./db/seed');
+    await seed();
+    res.json({ message: 'Database seeded successfully' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 404 — catch all unmatched routes
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });

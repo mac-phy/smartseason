@@ -67,4 +67,7 @@ async function seed() {
   console.log('  Agent3: peter@smartseason.com  / agent123');
 }
 
-seed().catch(e => { console.error(e); process.exit(1); });
+module.exports = { seed };
+if (require.main === module) {
+  seed().catch(e => { console.error(e); process.exit(1); });
+}
