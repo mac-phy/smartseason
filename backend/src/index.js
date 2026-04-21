@@ -50,12 +50,52 @@ app.use('/api/fields', fieldsRoutes);
 app.use('/api/users', usersRoutes);
 
 
-// TEMPORARY — seed endpoint, remove after first deploy
+//// TEMPORARY — remove after seeding
 app.get('/api/setup', async (req, res) => {
   try {
-    const { seed } = require('./db/seed');
-    await seed();
-    res.json({ message: 'Database seeded successfully' });
+    const bcrypt = require('bcryptjs');
+    const { run, get } = require('./db/init');
+    const hash = (p) => bcrypt.hashSync(p, 10);
+
+    await run('DELETE FROM field_updates');
+    await run('DELETE FROM fields');
+    await run('DELETE FROM users');
+
+    const admin = await run('INSERT INTO users (name,email,password,role) VALUES (?,?,?,?)',
+      ['Sarah Coordinator','admin@smartseason.com',hash('admin123'),'admin']);
+    const a1 = await run('INSERT INTO users (name,email,password,role) VALUES (?,?,?,?)',
+      ['James Mwangi','james@smartseason.com',hash('agent123'),'agent']);
+    const a2 = await run('INSERT INTO users (name,email,password,role) VALUES (?,?,?,?)',
+      ['Grace Wanjiku','grace@smartseason.com',hash('agent123'),'agent']);
+    const a3 = await run('INSERT INTO users (name,email,password,role) VALUES (?,?,?,?)',
+      ['Peter Kamau','peter@smartseason.com',hash('agent123'),'agent']);
+
+    const daysAgo = (n) => { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().split('T')[0]; };
+
+    const f1 = await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['Sunrise Plot A','Maize',daysAgo(80),'Ready','Kiambu North',3.5,a1.lastInsertRowid,admin.lastInsertRowid]);
+    await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['Sunrise Plot B','Beans',daysAgo(45),'Growing','Kiambu North',2.0,a1.lastInsertRowid,admin.lastInsertRowid]);
+    await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['Valley Green','Tomatoes',daysAgo(120),'Harvested','Kiambu South',1.5,a1.lastInsertRowid,admin.lastInsertRowid]);
+    await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['Hilltop Field','Wheat',daysAgo(10),'Planted','Kiambu East',5.0,a1.lastInsertRowid,admin.lastInsertRowid]);
+    await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['Riverside Farm 1','Rice',daysAgo(95),'Ready','Muranga Central',4.0,a2.lastInsertRowid,admin.lastInsertRowid]);
+    await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['Riverside Farm 2','Sugarcane',daysAgo(200),'Growing','Muranga Central',6.5,a2.lastInsertRowid,admin.lastInsertRowid]);
+    await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['Golden Acres','Maize',daysAgo(5),'Planted','Muranga West',3.0,a2.lastInsertRowid,admin.lastInsertRowid]);
+    await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['Eastern Plains','Sorghum',daysAgo(60),'Growing','Thika East',8.0,a3.lastInsertRowid,admin.lastInsertRowid]);
+    await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['Mango Grove','Mango',daysAgo(150),'Harvested','Thika West',2.5,a3.lastInsertRowid,admin.lastInsertRowid]);
+    await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['New Clearance','Beans',daysAgo(3),'Planted','Thika North',1.8,a3.lastInsertRowid,admin.lastInsertRowid]);
+    await run('INSERT INTO fields (name,crop_type,planting_date,stage,location,size_hectares,assigned_agent_id,created_by) VALUES (?,?,?,?,?,?,?,?)',
+      ['Reserve Block','Maize',daysAgo(70),'Growing','Central Hub',4.2,null,admin.lastInsertRowid]);
+
+    res.json({ message: '✅ Database seeded successfully', users: 4, fields: 11 });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
