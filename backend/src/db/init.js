@@ -1,59 +1,62 @@
-const { createClient } = require('@libsql/client');
-const path = require('path');
-const fs = require('fs');
+const { Pool } = require('pg');
 
-const dataDir = path.join(__dirname, '../../data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-
-const DB_PATH = path.join(dataDir, 'smartseason.db');
-const db = createClient({ url: `file:${DB_PATH}` });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
 async function initSchema() {
-  const stmts = [
-    `CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('admin','agent')),
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE TABLE IF NOT EXISTS fields (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS fields (
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       crop_type TEXT NOT NULL,
       planting_date DATE NOT NULL,
-      stage TEXT NOT NULL DEFAULT 'Planted',
+      stage TEXT NOT NULL DEFAULT 'Planted' CHECK(stage IN ('Planted','Growing','Ready','Harvested')),
       location TEXT,
       size_hectares REAL,
       assigned_agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_by INTEGER NOT NULL REFERENCES users(id),
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE TABLE IF NOT EXISTS field_updates (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS field_updates (
+      id SERIAL PRIMARY KEY,
       field_id INTEGER NOT NULL REFERENCES fields(id) ON DELETE CASCADE,
       agent_id INTEGER NOT NULL REFERENCES users(id),
       previous_stage TEXT,
       new_stage TEXT,
       notes TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE TRIGGER IF NOT EXISTS fields_updated_at
-      AFTER UPDATE ON fields
-      BEGIN
-        UPDATE fields SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-      END`,
-  ];
-  for (const sql of stmts) {
-    await db.execute(sql);
-  }
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE OR REPLACE FUNCTION update_updated_at()
+    RETURNS TRIGGER AS $$
+    BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+    $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS fields_updated_at ON fields;
+    CREATE TRIGGER fields_updated_at
+      BEFORE UPDATE ON fields
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+  `);
 }
 
 async function all(sql, args = []) {
-  const res = await db.execute({ sql, args });
-  return res.rows.map(row => Object.fromEntries(Object.entries(row)));
+  let i = 0;
+  const pgSql = sql.replace(/\?/g, () => `$${++i}`);
+  const res = await pool.query(pgSql, args);
+  return res.rows;
 }
 
 async function get(sql, args = []) {
@@ -62,8 +65,16 @@ async function get(sql, args = []) {
 }
 
 async function run(sql, args = []) {
-  const res = await db.execute({ sql, args });
-  return { lastInsertRowid: Number(res.lastInsertRowid), rowsAffected: res.rowsAffected };
+  let i = 0;
+  let pgSql = sql.replace(/\?/g, () => `$${++i}`);
+  if (pgSql.trimStart().toUpperCase().startsWith('INSERT')) {
+    pgSql += ' RETURNING id';
+  }
+  const res = await pool.query(pgSql, args);
+  return {
+    lastInsertRowid: res.rows[0]?.id || null,
+    rowsAffected: res.rowCount,
+  };
 }
 
 module.exports = { initSchema, all, get, run };

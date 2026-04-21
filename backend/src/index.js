@@ -54,7 +54,7 @@ app.use('/api/users', usersRoutes);
 app.get('/api/setup', async (req, res) => {
   try {
     const bcrypt = require('bcryptjs');
-    const { run, get } = require('./db/init');
+    const { initSchema, run, get, all } = require('./db/init');
     const hash = (p) => bcrypt.hashSync(p, 10);
 
     await run('DELETE FROM field_updates');
