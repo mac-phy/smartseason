@@ -49,3 +49,4 @@ export const api = {
   updateField: (id, data) => request(`/fields/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteField: (id) => request(`/fields/${id}`, { method: 'DELETE' }),
 };
+api.createAgent = (data) => request('/users/agents', { method: 'POST', body: JSON.stringify(data) });

@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { all, get, run } = require('../db/init');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const { computeStatus } = require('../utils/status');
@@ -21,6 +22,28 @@ router.get('/agents', authenticate, requireAdmin, async (req, res) => {
       WHERE u.role = 'agent'
       GROUP BY u.id ORDER BY u.name`);
     return res.json(agents);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// POST /api/users/agents — admin creates a new agent account
+router.post('/agents', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password)
+      return res.status(400).json({ error: 'name, email and password are required' });
+    if (password.length < 6)
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+    const existing = await get('SELECT id FROM users WHERE email = ?', [email]);
+    if (existing)
+      return res.status(400).json({ error: 'An account with this email already exists' });
+
+    const hashed = bcrypt.hashSync(password, 10);
+    const result = await run(
+      'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
+      [name, email, hashed, 'agent']
+    );
+    const agent = await get('SELECT id, name, email, role, created_at FROM users WHERE id = ?', [result.lastInsertRowid]);
+    return res.status(201).json(agent);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
